@@ -1,11 +1,45 @@
+# =========================
+# Python
+# =========================
+pycache/
+*.pyc
+*.pyo
+*.pyd
+
+# =========================
+# Node / React
+# =========================
+node_modules/
+frontend/build/
+
+# =========================
+# AI training outputs
+# =========================
+training_runs/
+
+# =========================
+# Runtime generated data
+# =========================
+uploads/
+input/
+sorted/
+
+# =========================
+# Model weights
+# =========================
+models/
+
+# =========================
+# Logs
+# =========================
+*.log
+
+# =========================
+# MacOS
+# =========================
 .DS_Store
 
-models/*
-uploads/*
-sorted/*
-datasets/*
-
-!models/.gitkeep
-!uploads/.gitkeep
-!sorted/.gitkeep
-!datasets/.gitkeep
+# =========================
+# Environment files
+# =========================
+.env

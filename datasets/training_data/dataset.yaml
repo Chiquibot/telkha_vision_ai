@@ -1,0 +1,115 @@
+path: /Users/macbookairm1256/telkha_vision_ai/datasets/training_data
+
+train: /Users/macbookairm1256/telkha_vision_ai/datasets/training_data/images/train
+val: /Users/macbookairm1256/telkha_vision_ai/datasets/training_data/images/val
+
+nc: 50
+
+names:
+  - GPS
+  - SITE AND TOWER
+  - HAULING
+  - FO
+  - ACCESS ROAD
+  - ACCESS DOOR
+  - FRONT VIEW OF SITE
+  - ANTENNA OVERVIEW
+  - GROUND PANORAMIC
+  - CABIN
+  - BASEPAD
+  - 2BAY CABINET
+  - BTS CABINET
+  - FUSHAN CABINET
+  - LRACKS
+  - ODC
+  - RECTIFIER
+  - TRANSPORT
+  - GPS ANTENNA
+  - GROUND BUSBAR
+  - FEEDER WINDOW
+  - ODC FEEDER
+  - CABLE LADDER
+  - TEST PIT
+  - GENSET
+  - FUEL TANK
+  - TRANSFORMER
+  - SUBMETER
+  - ASSET TAG
+  - ATS
+  - MTS
+  - ECB
+  - MCB
+  - MDP
+  - PPBTS
+  - ACPDB
+  - ACL
+  - AMB
+  - ANTENNA COVERAGE
+  - ANTENNA PORTS
+  - BRACKET
+  - LEG
+  - MTILT ETILT
+  - MICROWAVE
+  - PANORAMIC
+  - DECOM
+  - RRU RRH
+  - TOWER BUSBAR
+  - TOWER HEIGHT
+  - TOWER TOP TO GROUNDpath: datasets/training_data
+
+train: images/train
+val: images/val
+
+nc: 50
+
+names:
+  0: GPS
+  1: SITE AND TOWER
+  2: HAULING
+  3: FO
+  4: ACCESS ROAD
+  5: ACCESS DOOR
+  6: FRONT VIEW OF SITE
+  7: ANTENNA OVERVIEW
+  8: GROUND PANORAMIC
+  9: CABIN
+  10: BASEPAD
+  11: 2BAY CABINET
+  12: BTS CABINET
+  13: FUSHAN CABINET
+  14: LRACKS
+  15: ODC
+  16: RECTIFIER
+  17: TRANSPORT
+  18: GPS ANTENNA
+  19: GROUND BUSBAR
+  20: FEEDER WINDOW
+  21: ODC FEEDER
+  22: CABLE LADDER
+  23: TEST PIT
+  24: GENSET
+  25: FUEL TANK
+  26: TRANSFORMER
+  27: SUBMETER
+  28: ASSET TAG
+  29: ATS
+  30: MTS
+  31: ECB
+  32: MCB
+  33: MDP
+  34: PPBTS
+  35: ACPDB
+  36: ACL
+  37: AMB
+  38: ANTENNA COVERAGE
+  39: ANTENNA PORTS
+  40: BRACKET
+  41: LEG
+  42: MTILT ETILT
+  43: MICROWAVE
+  44: PANORAMIC
+  45: DECOM
+  46: RRU RRH
+  47: TOWER BUSBAR
+  48: TOWER HEIGHT
+  49: TOWER TOP TO GROUND
