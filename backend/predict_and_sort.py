@@ -18,6 +18,9 @@ Workflow
 Supports MULTI-CLASS sorting.
 One image can appear in multiple equipment folders.
 """
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
 
 import zipfile
 import shutil
