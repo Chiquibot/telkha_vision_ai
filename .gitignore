@@ -1,5 +1,11 @@
 .DS_Store
-models/
-uploads/
-sorted/
-datasets/
+
+models/*
+uploads/*
+sorted/*
+datasets/*
+
+!models/.gitkeep
+!uploads/.gitkeep
+!sorted/.gitkeep
+!datasets/.gitkeep
