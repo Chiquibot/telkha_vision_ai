@@ -1,10 +1,14 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 import shutil
 import subprocess
 import json
+import sys
+import threading
+import time
 
 app = FastAPI()
 
@@ -50,6 +54,9 @@ INPUT_DIR.mkdir(exist_ok=True)
 UPLOAD_DIR.mkdir(exist_ok=True)
 SORTED_DIR.mkdir(exist_ok=True)
 DEBUG_DIR.mkdir(exist_ok=True)
+
+# Serve debug images so the frontend can preview bounding boxes
+app.mount("/debug_images", StaticFiles(directory=DEBUG_DIR), name="debug_images")
 
 
 # --------------------------------------------------
@@ -104,7 +111,8 @@ async def upload(file: UploadFile = File(...)):
     try:
 
         process = subprocess.run(
-            ["python", "backend/predict_and_sort.py", site_name],
+            [sys.executable, "backend/predict_and_sort.py", site_name],
+            cwd=BASE_DIR,
             capture_output=True,
             text=True
         )
@@ -125,6 +133,23 @@ async def upload(file: UploadFile = File(...)):
         }
 
     print("[INFO] Sorting completed")
+
+
+    # --------------------------------------------------
+    # AUTO DELETE DEBUG IMAGES AFTER 15 MINUTES
+    # --------------------------------------------------
+
+    def cleanup_debug():
+        time.sleep(900)  # 15 minutes
+        debug_folder = DEBUG_DIR / site_name
+        if debug_folder.exists():
+            try:
+                shutil.rmtree(debug_folder)
+                print(f"[INFO] Debug images for {site_name} removed")
+            except Exception as e:
+                print(f"[WARNING] Failed to cleanup debug images: {e}")
+
+    threading.Thread(target=cleanup_debug, daemon=True).start()
 
 
     # --------------------------------------------------
@@ -179,7 +204,7 @@ def download(site: str):
     shutil.make_archive(
         str(zip_path).replace(".zip", ""),
         "zip",
-        site_folder
+        root_dir=site_folder
     )
 
     return FileResponse(
@@ -203,8 +228,9 @@ def debug(site: str):
 
     images = []
 
-    for img in debug_folder.glob("*.jpg"):
-        images.append(img.name)
+    for img in debug_folder.glob("*"):
+        if img.suffix.lower() in [".jpg", ".jpeg", ".png"]:
+            images.append(f"/debug_images/{site}/{img.name}")
 
     return {
         "site": site,

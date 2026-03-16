@@ -9,6 +9,8 @@ function App() {
   const [downloadLink, setDownloadLink] = useState(null);
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState(null);
+  const [debugImages, setDebugImages] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
 
   const handleUpload = async () => {
 
@@ -41,6 +43,16 @@ function App() {
 
       setDownloadLink(`${API}${data.download}`);
       setReport(data.report);
+
+      // Load debug images (AI bounding box preview)
+      try {
+        const debugResponse = await fetch(`${API}/debug/${data.site}`);
+        const debugData = await debugResponse.json();
+        setDebugImages(debugData.debug_images || []);
+        setCurrentIndex(0);
+      } catch {
+        setDebugImages([]);
+      }
 
     } catch (error) {
 
@@ -167,6 +179,62 @@ function App() {
             </>
 
           )}
+
+        </div>
+
+      )}
+
+      {/* AI DETECTION PREVIEW */}
+
+      {debugImages.length > 0 && (
+
+        <div style={{
+          marginTop: "40px",
+          width: "900px",
+          marginLeft: "auto",
+          marginRight: "auto"
+        }}>
+
+          <h2>AI Detection Preview</h2>
+
+          <div style={{
+            display: "flex",
+            justifyContent: "center",
+            gap: "10px",
+            flexWrap: "wrap"
+          }}>
+
+            {debugImages.slice(currentIndex, currentIndex + 5).map((img, i) => (
+
+              <img
+                key={i}
+                src={`${API}${img}`}
+                alt="AI detection"
+                style={{
+                  width: "160px",
+                  border: "1px solid #ccc",
+                  borderRadius: "6px"
+                }}
+              />
+
+            ))}
+
+          </div>
+
+          <br />
+
+          <button
+            onClick={() => setCurrentIndex(Math.max(currentIndex - 5, 0))}
+          >
+            ◀ Previous
+          </button>
+
+          <button
+            onClick={() => setCurrentIndex(currentIndex + 5)}
+            style={{ marginLeft: "10px" }}
+          >
+            Next ▶
+          </button>
 
         </div>
 
