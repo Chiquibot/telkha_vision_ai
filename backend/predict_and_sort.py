@@ -45,7 +45,7 @@ CLASSES_PATH = CONFIG_DIR / "classes.txt"
 
 YOLO_DETECT = BASE_DIR / "yolov5" / "detect.py"
 
-CONF_THRESHOLD = 0.60
+CONF_THRESHOLD = 0.35
 
 SUPPORTED_IMAGES = [
     ".jpg", ".jpeg", ".png", ".bmp",
