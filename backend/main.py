@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 import shutil
 import subprocess
+import json
 
 app = FastAPI()
 
@@ -58,51 +59,85 @@ async def upload(file: UploadFile = File(...)):
     if not filename.lower().endswith((".zip", ".rar")):
         return {"error": "Only .zip or .rar files are allowed"}
 
-    site_name = filename.split(".")[0]
+    site_name = Path(filename).stem
 
     input_path = INPUT_DIR / filename
-    upload_site_path = UPLOAD_DIR / site_name
-    sorted_site_path = SORTED_DIR / site_name
+    upload_path = UPLOAD_DIR / site_name
+    sorted_path = SORTED_DIR / site_name
 
-    # --------------------------------------------------
-    # CLEAN PREVIOUS RUN (important)
-    # --------------------------------------------------
+    # ---------------------------------------------
+    # CLEAN PREVIOUS RUN
+    # ---------------------------------------------
 
-    if upload_site_path.exists():
-        shutil.rmtree(upload_site_path)
+    if upload_path.exists():
+        shutil.rmtree(upload_path)
 
-    if sorted_site_path.exists():
-        shutil.rmtree(sorted_site_path)
+    if sorted_path.exists():
+        shutil.rmtree(sorted_path)
 
-    # --------------------------------------------------
+    # ---------------------------------------------
     # SAVE UPLOADED FILE
-    # --------------------------------------------------
+    # ---------------------------------------------
 
     with open(input_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
     print(f"[INFO] Processing site: {site_name}")
 
-    # --------------------------------------------------
-    # RUN SORTING SCRIPT
-    # --------------------------------------------------
+    # ---------------------------------------------
+    # RUN SORTING ENGINE
+    # ---------------------------------------------
 
     try:
+
         subprocess.run(
             ["python", "backend/predict_and_sort.py", site_name],
             check=True
         )
-    except subprocess.CalledProcessError:
-        return {"error": "AI processing failed"}
+
+    except subprocess.CalledProcessError as e:
+
+        return {
+            "status": "error",
+            "message": "AI sorting failed",
+            "details": str(e)
+        }
+
+    # ---------------------------------------------
+    # LOAD REPORT
+    # ---------------------------------------------
+
+    report_path = SORTED_DIR / site_name / "report.json"
+
+    report_data = {}
+
+    if report_path.exists():
+
+        with open(report_path) as f:
+            report_data = json.load(f)
+
+    else:
+
+        report_data = {
+            "total_images": 0,
+            "sorted_images": 0,
+            "unsorted_images": 0,
+            "class_counts": {}
+        }
+
+    # ---------------------------------------------
+    # RETURN RESPONSE TO FRONTEND
+    # ---------------------------------------------
 
     return {
-        "status": "processing complete",
+        "status": "complete",
         "site": site_name,
-        "download": f"/download/{site_name}"
+        "download": f"/download/{site_name}",
+        "report": report_data
     }
 
 # --------------------------------------------------
-# DOWNLOAD ENDPOINT
+# DOWNLOAD SORTED RESULT
 # --------------------------------------------------
 
 @app.get("/download/{site}")
@@ -113,20 +148,19 @@ def download(site: str):
     if not site_folder.exists():
         return {"error": "Sorted folder not found"}
 
-    zip_path = SORTED_DIR / f"{site}_sorted"
+    zip_path = SORTED_DIR / f"{site}_sorted.zip"
 
-    # --------------------------------------------------
-    # CREATE ZIP FROM SORTED FOLDER
-    # --------------------------------------------------
+    # Create zip if not existing
+    if not zip_path.exists():
 
-    shutil.make_archive(
-        str(zip_path),
-        'zip',
-        site_folder
-    )
+        shutil.make_archive(
+            str(zip_path).replace(".zip", ""),
+            "zip",
+            site_folder
+        )
 
     return FileResponse(
-        path=f"{zip_path}.zip",
+        path=zip_path,
         filename=f"{site}_sorted.zip",
         media_type="application/zip"
     )

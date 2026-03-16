@@ -6,26 +6,24 @@ TELKHA VISION AI
 Photo Sorting Engine
 
 Workflow
-
 1. Receive site archive (.zip or .rar)
 2. Extract photos
 3. Flatten folder structure
 4. Run YOLO detection
-5. Sort images based on detected telecom equipment
+5. Sort images into equipment folders
 6. Preserve unsorted images
-7. Remove temporary files
-
-Supports MULTI-CLASS sorting.
-One image can appear in multiple equipment folders.
+7. Generate AI report
+8. Optional boxed detection images
+9. Cleanup temporary files
 """
+
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-
 
 import zipfile
 import shutil
 import subprocess
-import os
+import json
 from pathlib import Path
 
 # ============================================================
@@ -47,19 +45,21 @@ YOLO_DETECT = BASE_DIR / "yolov5" / "detect.py"
 
 CONF_THRESHOLD = 0.35
 
+# Optional debugging mode (bounding boxes)
+SAVE_BOXED_IMAGES = False
+
 SUPPORTED_IMAGES = [
-    ".jpg", ".jpeg", ".png", ".bmp",
-    ".tif", ".tiff", ".webp"
+    ".jpg",".jpeg",".png",".bmp",".tif",".tiff",".webp"
 ]
 
 # ============================================================
-# LOAD CLASS NAMES
+# LOAD CLASSES
 # ============================================================
 
 def load_classes():
 
     if not CLASSES_PATH.exists():
-        raise FileNotFoundError(f"Classes file missing: {CLASSES_PATH}")
+        raise FileNotFoundError(f"Missing classes file {CLASSES_PATH}")
 
     with open(CLASSES_PATH) as f:
         classes = [c.strip() for c in f.readlines() if c.strip()]
@@ -67,7 +67,6 @@ def load_classes():
     print(f"[INFO] Loaded {len(classes)} classes")
 
     return classes
-
 
 CATEGORY_NAMES = load_classes()
 
@@ -85,54 +84,49 @@ def extract_archive(site_name):
 
     if zip_path.exists():
 
-        print("[INFO] Extracting ZIP archive")
+        print("[INFO] Extracting ZIP")
 
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(extract_path)
 
     elif rar_path.exists():
 
-        print("[INFO] Extracting RAR archive")
+        print("[INFO] Extracting RAR")
 
         subprocess.run([
-            "unrar", "x", "-o+",
+            "unrar","x","-o+",
             str(rar_path),
             str(extract_path)
         ], check=True)
 
     else:
-
-        raise FileNotFoundError(
-            f"No archive found for site {site_name}"
-        )
-
-    print(f"[INFO] Archive extracted → {extract_path}")
+        raise FileNotFoundError("No archive found")
 
     flatten_images(extract_path)
 
 # ============================================================
-# FLATTEN NESTED FOLDERS
+# FLATTEN IMAGE FOLDERS
 # ============================================================
 
-def flatten_images(site_folder):
+def flatten_images(folder):
 
     moved = 0
 
-    for file in site_folder.rglob("*"):
+    for file in folder.rglob("*"):
 
         if file.suffix.lower() in SUPPORTED_IMAGES:
 
-            dest = site_folder / file.name
+            dest = folder / file.name
 
             if file != dest:
                 shutil.move(str(file), dest)
                 moved += 1
 
-    for folder in site_folder.glob("*"):
-        if folder.is_dir():
-            shutil.rmtree(folder)
+    for sub in folder.glob("*"):
+        if sub.is_dir():
+            shutil.rmtree(sub)
 
-    print(f"[INFO] Flattened folders ({moved} images moved)")
+    print(f"[INFO] Flattened {moved} images")
 
 # ============================================================
 # RUN YOLO DETECTION
@@ -140,23 +134,24 @@ def flatten_images(site_folder):
 
 def run_detection(site_name):
 
-    os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-
-    source_path = UPLOAD_DIR / site_name
-
-    print("[INFO] Running YOLO detection")
+    source = UPLOAD_DIR / site_name
 
     detect_cmd = [
         "python",
         str(YOLO_DETECT),
         "--weights", str(MODEL_PATH),
-        "--source", str(source_path),
+        "--source", str(source),
         "--project", str(SORTED_DIR),
         "--name", site_name,
         "--exist-ok",
         "--save-txt",
         "--conf", str(CONF_THRESHOLD)
     ]
+
+    if SAVE_BOXED_IMAGES:
+        detect_cmd.append("--save-img")
+
+    print("[INFO] Running YOLO detection")
 
     subprocess.run(detect_cmd, check=True)
 
@@ -169,28 +164,28 @@ def sort_images(site_name):
     upload_path = UPLOAD_DIR / site_name
     labels_path = SORTED_DIR / site_name / "labels"
 
-    if not labels_path.exists():
-        print("[WARNING] No YOLO labels found")
-        return
+    classified = set()
+    class_counts = {}
 
-    classified_images = set()
+    total_images = 0
+    unsorted = 0
 
     for label_file in labels_path.glob("*.txt"):
 
-        image_name = label_file.stem
+        base = label_file.stem
         image_path = None
 
         for ext in SUPPORTED_IMAGES:
-            candidate = upload_path / (image_name + ext)
+            candidate = upload_path / (base + ext)
             if candidate.exists():
                 image_path = candidate
-                image_name = candidate.name
+                base = candidate.name
                 break
 
         if not image_path:
             continue
 
-        detected_classes = set()
+        classes_found = set()
 
         with open(label_file) as f:
             lines = [l.strip() for l in f.readlines() if l.strip()]
@@ -208,29 +203,55 @@ def sort_images(site_name):
                 continue
 
             category = CATEGORY_NAMES[class_id]
-            detected_classes.add(category)
 
-        for category in detected_classes:
+            classes_found.add(category)
 
-            dest_folder = SORTED_DIR / site_name / category
-            dest_folder.mkdir(parents=True, exist_ok=True)
+        for category in classes_found:
 
-            shutil.copy(image_path, dest_folder / image_name)
+            dest = SORTED_DIR / site_name / category
+            dest.mkdir(parents=True, exist_ok=True)
 
-        if detected_classes:
-            classified_images.add(image_name)
+            shutil.copy(image_path, dest / base)
 
-    root_output = SORTED_DIR / site_name
+            class_counts[category] = class_counts.get(category,0)+1
+
+        if classes_found:
+            classified.add(base)
 
     for img in upload_path.iterdir():
 
         if img.suffix.lower() not in SUPPORTED_IMAGES:
             continue
 
-        if img.name not in classified_images:
-            shutil.copy(img, root_output / img.name)
+        total_images += 1
 
-    print("[INFO] Image sorting complete")
+        if img.name not in classified:
+
+            shutil.copy(img, SORTED_DIR / site_name / img.name)
+
+            unsorted += 1
+
+    return total_images, unsorted, class_counts
+
+# ============================================================
+# REPORT GENERATION
+# ============================================================
+
+def generate_report(site_name, total, unsorted, class_counts):
+
+    report = {
+        "total_images": total,
+        "unsorted_images": unsorted,
+        "sorted_images": total-unsorted,
+        "class_counts": class_counts
+    }
+
+    report_path = SORTED_DIR / site_name / "report.json"
+
+    with open(report_path,"w") as f:
+        json.dump(report,f,indent=4)
+
+    print("[INFO] Report generated")
 
 # ============================================================
 # CLEANUP
@@ -238,12 +259,10 @@ def sort_images(site_name):
 
 def cleanup(site_name):
 
-    upload_path = UPLOAD_DIR / site_name
+    upload = UPLOAD_DIR / site_name
 
-    if upload_path.exists():
-        shutil.rmtree(upload_path)
-
-    print("[INFO] Temporary files removed")
+    if upload.exists():
+        shutil.rmtree(upload)
 
 # ============================================================
 # MAIN PROCESS
@@ -259,11 +278,13 @@ def process_site(site_name):
 
     run_detection(site_name)
 
-    sort_images(site_name)
+    total, unsorted, class_counts = sort_images(site_name)
+
+    generate_report(site_name,total,unsorted,class_counts)
 
     cleanup(site_name)
 
-    print("[INFO] Site processing completed")
+    print("[INFO] Processing completed")
 
 # ============================================================
 # CLI ENTRY
@@ -274,10 +295,7 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) != 2:
-        print("Usage:")
-        print("python predict_and_sort.py SITENAME")
+        print("Usage: python predict_and_sort.py SITENAME")
         exit(1)
 
-    site_name = sys.argv[1]
-
-    process_site(site_name)
+    process_site(sys.argv[1])
