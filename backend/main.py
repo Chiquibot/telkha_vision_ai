@@ -7,6 +7,14 @@ import subprocess
 
 app = FastAPI()
 
+@app.get("/")
+def home():
+    return {
+        "message": "Telkha Vision AI Server Running",
+        "docs": "/docs",
+        "upload": "/upload"
+    }
+
 # Allow React frontend to communicate with FastAPI
 app.add_middleware(
     CORSMiddleware,
