@@ -41,15 +41,22 @@ function App() {
         return;
       }
 
+      if (!data.site) {
+        console.error("Backend did not return site name:", data);
+      }
       setDownloadLink(`${API}${data.download}`);
       setReport(data.report);
 
       // Load debug images (AI bounding box preview)
       try {
-        const debugResponse = await fetch(`${API}/debug/${data.site}`);
-        const debugData = await debugResponse.json();
-        setDebugImages(debugData.debug_images || []);
-        setCurrentIndex(0);
+        if (data.site) {
+          const debugResponse = await fetch(`${API}/debug/${data.site}`);
+          const debugData = await debugResponse.json();
+          setDebugImages(debugData.debug_images || []);
+          setCurrentIndex(0);
+        } else {
+          setDebugImages([]);
+        }
       } catch {
         setDebugImages([]);
       }
