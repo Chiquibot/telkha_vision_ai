@@ -171,7 +171,7 @@ def run_detection(site_name):
     project_folder = DEBUG_DIR if SAVE_BOXED_IMAGES else SORTED_DIR
 
     detect_cmd = [
-        "python",
+        str(Path(os.sys.executable)),
         str(YOLO_DETECT),
         "--weights", str(MODEL_PATH),
         "--source", str(source),
@@ -180,16 +180,16 @@ def run_detection(site_name):
         "--exist-ok",
         "--save-txt",
         "--save-conf",
-        "--save-crop",
+        # "--save-crop",  # removed as per instructions
         "--conf", str(CONF_THRESHOLD)
     ]
 
-    if SAVE_BOXED_IMAGES:
-        detect_cmd.append("--save-img")
+    # YOLOv5 automatically saves images with bounding boxes unless --nosave is used
+    # so we do not need --save-img
 
     print("[INFO] Running YOLO detection")
-
-    subprocess.run(detect_cmd,check=True)
+    print("[DEBUG] YOLO command:", " ".join(detect_cmd))
+    subprocess.run(detect_cmd, check=True, cwd=str(BASE_DIR))
 
     if SAVE_BOXED_IMAGES:
         auto_delete_debug(site_name)
