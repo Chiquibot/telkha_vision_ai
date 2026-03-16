@@ -179,6 +179,7 @@ def run_detection(site_name):
         "--name", site_name,
         "--exist-ok",
         "--save-txt",
+        "--save-conf",
         "--conf", str(CONF_THRESHOLD)
     ]
 
@@ -199,8 +200,28 @@ def run_detection(site_name):
 
 def sort_images(site_name):
 
+    if SAVE_BOXED_IMAGES:
+        labels_path = DEBUG_DIR / site_name / "labels"
+    else:
+        labels_path = SORTED_DIR / site_name / "labels"
+
+    if not labels_path.exists():
+        print("[WARNING] Label folder not found. No detections produced.")
+        upload_path = UPLOAD_DIR / site_name
+        total_images = 0
+        unsorted = 0
+
+        for img in upload_path.iterdir():
+            if img.suffix.lower() in SUPPORTED_IMAGES:
+                total_images += 1
+                shutil.copy(img, SORTED_DIR / site_name / img.name)
+                unsorted += 1
+
+        return total_images, unsorted, {}, {}
+
     upload_path = UPLOAD_DIR / site_name
-    labels_path = DEBUG_DIR / site_name / "labels"
+    # Ensure destination root folder exists
+    (SORTED_DIR / site_name).mkdir(parents=True, exist_ok=True)
 
     classified = set()
     class_counts = {}
@@ -237,7 +258,8 @@ def sort_images(site_name):
                 continue
 
             class_id = int(parts[0])
-            confidence = float(parts[1])
+            # YOLO label format: class x_center y_center width height [confidence]
+            confidence = float(parts[5]) if len(parts) > 5 else 0.0
 
             if class_id >= len(CATEGORY_NAMES):
                 continue
@@ -320,6 +342,9 @@ def cleanup(site_name):
 def process_site(site_name):
 
     print("------------------------------------------------")
+    # Ensure sorted output folder exists
+    sorted_site_dir = SORTED_DIR / site_name
+    sorted_site_dir.mkdir(parents=True, exist_ok=True)
     print(f"[INFO] Processing site: {site_name}")
     print("------------------------------------------------")
 
