@@ -180,14 +180,14 @@ def run_detection(site_name):
         "--exist-ok",
         "--save-txt",
         "--save-conf",
-        # "--save-crop",  # removed as per instructions
         "--conf", str(CONF_THRESHOLD)
-    ]
+        ]
 
     # YOLOv5 automatically saves images with bounding boxes unless --nosave is used
     # so we do not need --save-img
 
     print("[INFO] Running YOLO detection")
+    print("[DEBUG] Project folder:", project_folder)
     print("[DEBUG] YOLO command:", " ".join(detect_cmd))
     subprocess.run(detect_cmd, check=True, cwd=str(BASE_DIR))
 
