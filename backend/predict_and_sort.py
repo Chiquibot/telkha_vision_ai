@@ -180,6 +180,7 @@ def run_detection(site_name):
         "--exist-ok",
         "--save-txt",
         "--save-conf",
+        "--save-crop",
         "--conf", str(CONF_THRESHOLD)
     ]
 
