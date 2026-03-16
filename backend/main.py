@@ -21,8 +21,9 @@ def home():
         "download_endpoint": "/download/{site}"
     }
 
+
 # --------------------------------------------------
-# CORS (React frontend access)
+# CORS (Allow React frontend)
 # --------------------------------------------------
 
 app.add_middleware(
@@ -33,6 +34,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # --------------------------------------------------
 # PROJECT DIRECTORIES
 # --------------------------------------------------
@@ -42,10 +44,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_DIR = BASE_DIR / "input"
 UPLOAD_DIR = BASE_DIR / "uploads"
 SORTED_DIR = BASE_DIR / "sorted"
+DEBUG_DIR = BASE_DIR / "debug"
 
 INPUT_DIR.mkdir(exist_ok=True)
 UPLOAD_DIR.mkdir(exist_ok=True)
 SORTED_DIR.mkdir(exist_ok=True)
+DEBUG_DIR.mkdir(exist_ok=True)
+
 
 # --------------------------------------------------
 # UPLOAD ENDPOINT
@@ -64,10 +69,12 @@ async def upload(file: UploadFile = File(...)):
     input_path = INPUT_DIR / filename
     upload_path = UPLOAD_DIR / site_name
     sorted_path = SORTED_DIR / site_name
+    debug_path = DEBUG_DIR / site_name
+    zip_path = SORTED_DIR / f"{site_name}_sorted.zip"
 
-    # ---------------------------------------------
+    # --------------------------------------------------
     # CLEAN PREVIOUS RUN
-    # ---------------------------------------------
+    # --------------------------------------------------
 
     if upload_path.exists():
         shutil.rmtree(upload_path)
@@ -75,41 +82,56 @@ async def upload(file: UploadFile = File(...)):
     if sorted_path.exists():
         shutil.rmtree(sorted_path)
 
-    # ---------------------------------------------
+    if debug_path.exists():
+        shutil.rmtree(debug_path)
+
+    if zip_path.exists():
+        zip_path.unlink()
+
+    # --------------------------------------------------
     # SAVE UPLOADED FILE
-    # ---------------------------------------------
+    # --------------------------------------------------
 
     with open(input_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    print(f"[INFO] Processing site: {site_name}")
+    print(f"[INFO] Uploaded site: {site_name}")
 
-    # ---------------------------------------------
-    # RUN SORTING ENGINE
-    # ---------------------------------------------
+    # --------------------------------------------------
+    # RUN AI SORTING ENGINE
+    # --------------------------------------------------
 
     try:
 
-        subprocess.run(
+        process = subprocess.run(
             ["python", "backend/predict_and_sort.py", site_name],
-            check=True
+            capture_output=True,
+            text=True
         )
 
-    except subprocess.CalledProcessError as e:
+        if process.returncode != 0:
+            return {
+                "status": "error",
+                "message": "AI sorting failed",
+                "details": process.stderr
+            }
+
+    except Exception as e:
 
         return {
             "status": "error",
-            "message": "AI sorting failed",
+            "message": "Failed to execute sorting engine",
             "details": str(e)
         }
 
-    # ---------------------------------------------
-    # LOAD REPORT
-    # ---------------------------------------------
+    print("[INFO] Sorting completed")
+
+
+    # --------------------------------------------------
+    # LOAD AI REPORT
+    # --------------------------------------------------
 
     report_path = SORTED_DIR / site_name / "report.json"
-
-    report_data = {}
 
     if report_path.exists():
 
@@ -122,22 +144,25 @@ async def upload(file: UploadFile = File(...)):
             "total_images": 0,
             "sorted_images": 0,
             "unsorted_images": 0,
-            "class_counts": {}
+            "class_counts": {},
+            "class_confidence": {}
         }
 
-    # ---------------------------------------------
-    # RETURN RESPONSE TO FRONTEND
-    # ---------------------------------------------
+    # --------------------------------------------------
+    # RETURN RESPONSE
+    # --------------------------------------------------
 
     return {
         "status": "complete",
         "site": site_name,
         "download": f"/download/{site_name}",
+        "debug_images": f"/debug/{site_name}",
         "report": report_data
     }
 
+
 # --------------------------------------------------
-# DOWNLOAD SORTED RESULT
+# DOWNLOAD SORTED RESULTS
 # --------------------------------------------------
 
 @app.get("/download/{site}")
@@ -150,17 +175,38 @@ def download(site: str):
 
     zip_path = SORTED_DIR / f"{site}_sorted.zip"
 
-    # Create zip if not existing
-    if not zip_path.exists():
-
-        shutil.make_archive(
-            str(zip_path).replace(".zip", ""),
-            "zip",
-            site_folder
-        )
+    # Create zip dynamically
+    shutil.make_archive(
+        str(zip_path).replace(".zip", ""),
+        "zip",
+        site_folder
+    )
 
     return FileResponse(
         path=zip_path,
         filename=f"{site}_sorted.zip",
         media_type="application/zip"
     )
+
+
+# --------------------------------------------------
+# OPTIONAL DEBUG IMAGE VIEWER
+# --------------------------------------------------
+
+@app.get("/debug/{site}")
+def debug(site: str):
+
+    debug_folder = DEBUG_DIR / site
+
+    if not debug_folder.exists():
+        return {"error": "Debug folder not found or expired"}
+
+    images = []
+
+    for img in debug_folder.glob("*.jpg"):
+        images.append(img.name)
+
+    return {
+        "site": site,
+        "debug_images": images
+    }

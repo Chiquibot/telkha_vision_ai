@@ -2,7 +2,7 @@ import React, { useState } from "react";
 
 function App() {
 
-  // Linux AI server
+  // AI SERVER IP (Linux server)
   const API = "http://192.168.20.200:8000";
 
   const [file, setFile] = useState(null);
@@ -55,14 +55,14 @@ function App() {
 
     <div style={{
       textAlign: "center",
-      marginTop: "80px",
+      marginTop: "60px",
       fontFamily: "Arial"
     }}>
 
       <h1>Telkha Vision AI</h1>
       <p>Telecom Survey Photo Auto-Sorter</p>
 
-      {/* Upload input */}
+      {/* Upload section */}
 
       <input
         type="file"
@@ -78,59 +78,117 @@ function App() {
 
       <br /><br />
 
-      {/* Loading message */}
+      {/* Processing indicator */}
 
       {loading && (
         <div>
-          <p>Processing photos... please wait</p>
+          <p>AI processing in progress...</p>
         </div>
       )}
 
-      {/* AI report */}
+      {/* AI REPORT DASHBOARD */}
 
       {report && (
+
         <div style={{
           marginTop: "30px",
           border: "1px solid #ddd",
           padding: "20px",
-          width: "420px",
+          width: "500px",
           marginLeft: "auto",
           marginRight: "auto",
-          borderRadius: "8px",
+          borderRadius: "10px",
           backgroundColor: "#fafafa"
         }}>
 
-          <h2>Sorting Result</h2>
+          <h2>Sorting Summary</h2>
 
           <p><b>Total Photos:</b> {report.total_images}</p>
           <p><b>Sorted:</b> {report.sorted_images}</p>
           <p><b>Unsorted:</b> {report.unsorted_images}</p>
+
+          <hr />
 
           <h3>Detected Equipment</h3>
 
           {Object.keys(report.class_counts).length === 0 ? (
             <p>No equipment detected</p>
           ) : (
+
             Object.keys(report.class_counts).map((key) => (
-              <p key={key}>
-                {key} : {report.class_counts[key]}
-              </p>
+
+              <div key={key} style={{
+                display: "flex",
+                justifyContent: "space-between",
+                borderBottom: "1px solid #eee",
+                padding: "5px"
+              }}>
+
+                <span>{key}</span>
+
+                <span>
+                  {report.class_counts[key]} detections
+                </span>
+
+              </div>
+
             ))
+
+          )}
+
+          <hr />
+
+          {/* CLASS CONFIDENCE */}
+
+          {report.class_confidence && (
+
+            <>
+              <h3>AI Confidence</h3>
+
+              {Object.keys(report.class_confidence).map((key) => (
+
+                <div key={key} style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  borderBottom: "1px solid #eee",
+                  padding: "5px"
+                }}>
+
+                  <span>{key}</span>
+
+                  <span>
+                    {(report.class_confidence[key] * 100).toFixed(1)} %
+                  </span>
+
+                </div>
+
+              ))}
+
+            </>
+
           )}
 
         </div>
+
       )}
 
       <br />
 
-      {/* Download button */}
+      {/* DOWNLOAD BUTTON */}
 
       {downloadLink && (
+
         <a href={downloadLink}>
-          <button>
+
+          <button style={{
+            padding: "10px 20px",
+            fontSize: "16px"
+          }}>
             Download Sorted Results
           </button>
+
         </a>
+
       )}
 
     </div>

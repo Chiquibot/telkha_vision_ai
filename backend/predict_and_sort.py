@@ -13,8 +13,9 @@ Workflow
 5. Sort images into equipment folders
 6. Preserve unsorted images
 7. Generate AI report
-8. Optional boxed detection images
-9. Cleanup temporary files
+8. Optional bounding box preview images
+9. Auto-delete debug images after 15 minutes
+10. Cleanup temporary files
 """
 
 import os
@@ -24,7 +25,10 @@ import zipfile
 import shutil
 import subprocess
 import json
+import threading
+import time
 from pathlib import Path
+
 
 # ============================================================
 # CONFIGURATION
@@ -37,6 +41,7 @@ UPLOAD_DIR = BASE_DIR / "uploads"
 SORTED_DIR = BASE_DIR / "sorted"
 MODEL_DIR = BASE_DIR / "models"
 CONFIG_DIR = BASE_DIR / "config"
+DEBUG_DIR = BASE_DIR / "debug"
 
 MODEL_PATH = MODEL_DIR / "best.pt"
 CLASSES_PATH = CONFIG_DIR / "classes.txt"
@@ -45,12 +50,16 @@ YOLO_DETECT = BASE_DIR / "yolov5" / "detect.py"
 
 CONF_THRESHOLD = 0.35
 
-# Optional debugging mode (bounding boxes)
-SAVE_BOXED_IMAGES = False
+# Enable detection preview images
+SAVE_BOXED_IMAGES = True
 
 SUPPORTED_IMAGES = [
-    ".jpg",".jpeg",".png",".bmp",".tif",".tiff",".webp"
+".jpg",".jpeg",".png",".bmp",".tif",".tiff",".webp"
 ]
+
+
+DEBUG_DIR.mkdir(exist_ok=True)
+
 
 # ============================================================
 # LOAD CLASSES
@@ -68,7 +77,28 @@ def load_classes():
 
     return classes
 
+
 CATEGORY_NAMES = load_classes()
+
+
+# ============================================================
+# AUTO DELETE DEBUG FOLDER
+# ============================================================
+
+def auto_delete_debug(site_name):
+
+    debug_path = DEBUG_DIR / site_name
+
+    def delete():
+
+        time.sleep(900)
+
+        if debug_path.exists():
+            shutil.rmtree(debug_path)
+            print(f"[INFO] Debug images deleted: {site_name}")
+
+    threading.Thread(target=delete, daemon=True).start()
+
 
 # ============================================================
 # EXTRACT ARCHIVE
@@ -86,7 +116,7 @@ def extract_archive(site_name):
 
         print("[INFO] Extracting ZIP")
 
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+        with zipfile.ZipFile(zip_path,"r") as zip_ref:
             zip_ref.extractall(extract_path)
 
     elif rar_path.exists():
@@ -97,12 +127,13 @@ def extract_archive(site_name):
             "unrar","x","-o+",
             str(rar_path),
             str(extract_path)
-        ], check=True)
+        ],check=True)
 
     else:
         raise FileNotFoundError("No archive found")
 
     flatten_images(extract_path)
+
 
 # ============================================================
 # FLATTEN IMAGE FOLDERS
@@ -119,7 +150,7 @@ def flatten_images(folder):
             dest = folder / file.name
 
             if file != dest:
-                shutil.move(str(file), dest)
+                shutil.move(str(file),dest)
                 moved += 1
 
     for sub in folder.glob("*"):
@@ -127,6 +158,7 @@ def flatten_images(folder):
             shutil.rmtree(sub)
 
     print(f"[INFO] Flattened {moved} images")
+
 
 # ============================================================
 # RUN YOLO DETECTION
@@ -136,12 +168,14 @@ def run_detection(site_name):
 
     source = UPLOAD_DIR / site_name
 
+    project_folder = DEBUG_DIR if SAVE_BOXED_IMAGES else SORTED_DIR
+
     detect_cmd = [
         "python",
         str(YOLO_DETECT),
         "--weights", str(MODEL_PATH),
         "--source", str(source),
-        "--project", str(SORTED_DIR),
+        "--project", str(project_folder),
         "--name", site_name,
         "--exist-ok",
         "--save-txt",
@@ -153,7 +187,11 @@ def run_detection(site_name):
 
     print("[INFO] Running YOLO detection")
 
-    subprocess.run(detect_cmd, check=True)
+    subprocess.run(detect_cmd,check=True)
+
+    if SAVE_BOXED_IMAGES:
+        auto_delete_debug(site_name)
+
 
 # ============================================================
 # SORT IMAGES
@@ -162,10 +200,11 @@ def run_detection(site_name):
 def sort_images(site_name):
 
     upload_path = UPLOAD_DIR / site_name
-    labels_path = SORTED_DIR / site_name / "labels"
+    labels_path = DEBUG_DIR / site_name / "labels"
 
     classified = set()
     class_counts = {}
+    class_confidence = {}
 
     total_images = 0
     unsorted = 0
@@ -198,6 +237,7 @@ def sort_images(site_name):
                 continue
 
             class_id = int(parts[0])
+            confidence = float(parts[1])
 
             if class_id >= len(CATEGORY_NAMES):
                 continue
@@ -206,14 +246,15 @@ def sort_images(site_name):
 
             classes_found.add(category)
 
+            class_counts[category] = class_counts.get(category,0)+1
+            class_confidence.setdefault(category,[]).append(confidence)
+
         for category in classes_found:
 
             dest = SORTED_DIR / site_name / category
-            dest.mkdir(parents=True, exist_ok=True)
+            dest.mkdir(parents=True,exist_ok=True)
 
-            shutil.copy(image_path, dest / base)
-
-            class_counts[category] = class_counts.get(category,0)+1
+            shutil.copy(image_path,dest/base)
 
         if classes_found:
             classified.add(base)
@@ -227,31 +268,38 @@ def sort_images(site_name):
 
         if img.name not in classified:
 
-            shutil.copy(img, SORTED_DIR / site_name / img.name)
-
+            shutil.copy(img,SORTED_DIR/site_name/img.name)
             unsorted += 1
 
-    return total_images, unsorted, class_counts
+    avg_conf = {
+        k: round(sum(v)/len(v),3)
+        for k,v in class_confidence.items()
+    }
+
+    return total_images,unsorted,class_counts,avg_conf
+
 
 # ============================================================
 # REPORT GENERATION
 # ============================================================
 
-def generate_report(site_name, total, unsorted, class_counts):
+def generate_report(site_name,total,unsorted,class_counts,avg_conf):
 
     report = {
-        "total_images": total,
-        "unsorted_images": unsorted,
-        "sorted_images": total-unsorted,
-        "class_counts": class_counts
+        "total_images":total,
+        "unsorted_images":unsorted,
+        "sorted_images":total-unsorted,
+        "class_counts":class_counts,
+        "class_confidence":avg_conf
     }
 
-    report_path = SORTED_DIR / site_name / "report.json"
+    report_path = SORTED_DIR/site_name/"report.json"
 
     with open(report_path,"w") as f:
         json.dump(report,f,indent=4)
 
     print("[INFO] Report generated")
+
 
 # ============================================================
 # CLEANUP
@@ -259,10 +307,11 @@ def generate_report(site_name, total, unsorted, class_counts):
 
 def cleanup(site_name):
 
-    upload = UPLOAD_DIR / site_name
+    upload = UPLOAD_DIR/site_name
 
     if upload.exists():
         shutil.rmtree(upload)
+
 
 # ============================================================
 # MAIN PROCESS
@@ -278,13 +327,14 @@ def process_site(site_name):
 
     run_detection(site_name)
 
-    total, unsorted, class_counts = sort_images(site_name)
+    total,unsorted,class_counts,avg_conf = sort_images(site_name)
 
-    generate_report(site_name,total,unsorted,class_counts)
+    generate_report(site_name,total,unsorted,class_counts,avg_conf)
 
     cleanup(site_name)
 
     print("[INFO] Processing completed")
+
 
 # ============================================================
 # CLI ENTRY
@@ -294,7 +344,7 @@ if __name__ == "__main__":
 
     import sys
 
-    if len(sys.argv) != 2:
+    if len(sys.argv)!=2:
         print("Usage: python predict_and_sort.py SITENAME")
         exit(1)
 
